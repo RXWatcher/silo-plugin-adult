@@ -1,6 +1,6 @@
 {
   "plugin_id": "continuum.adult",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "checksum": "__CHECKSUM__",
   "continuum_api_version": "v1",
   "supported_platforms": [
