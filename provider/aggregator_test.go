@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ContinuumApp/continuum-plugin-adult/metadata"
+	"github.com/RXWatcher/continuum-plugin-adult/metadata"
 )
 
 // fakeSource is a minimal Source implementation for testing aggregator

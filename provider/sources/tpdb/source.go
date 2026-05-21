@@ -23,8 +23,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ContinuumApp/continuum-plugin-adult/metadata"
-	"github.com/ContinuumApp/continuum-plugin-adult/models"
+	"github.com/RXWatcher/continuum-plugin-adult/metadata"
+	"github.com/RXWatcher/continuum-plugin-adult/models"
 )
 
 // Slug is the source identifier used in ProviderIDs maps and image URLs.

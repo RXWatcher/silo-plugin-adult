@@ -3,7 +3,7 @@ package metadata
 import (
 	"strings"
 
-	"github.com/ContinuumApp/continuum-plugin-adult/models"
+	"github.com/RXWatcher/continuum-plugin-adult/models"
 )
 
 // SearchQuery is passed to SearchProvider.Search().

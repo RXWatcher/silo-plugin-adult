@@ -22,11 +22,11 @@ import (
 	publicmanifest "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginsdk/manifest"
 	"github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginsdk/runtime"
 
-	"github.com/ContinuumApp/continuum-plugin-adult/metadata"
-	"github.com/ContinuumApp/continuum-plugin-adult/models"
-	"github.com/ContinuumApp/continuum-plugin-adult/provider"
-	"github.com/ContinuumApp/continuum-plugin-adult/provider/sources/stash"
-	"github.com/ContinuumApp/continuum-plugin-adult/provider/sources/tpdb"
+	"github.com/RXWatcher/continuum-plugin-adult/metadata"
+	"github.com/RXWatcher/continuum-plugin-adult/models"
+	"github.com/RXWatcher/continuum-plugin-adult/provider"
+	"github.com/RXWatcher/continuum-plugin-adult/provider/sources/stash"
+	"github.com/RXWatcher/continuum-plugin-adult/provider/sources/tpdb"
 )
 
 // version is set at build time via -ldflags "-X main.version=...".
