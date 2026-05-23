@@ -3,7 +3,7 @@ package metadata
 import (
 	"strings"
 
-	"github.com/RXWatcher/continuum-plugin-adult/models"
+	"github.com/RXWatcher/silo-plugin-adult/models"
 )
 
 // SearchQuery is passed to SearchProvider.Search().

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/RXWatcher/continuum-plugin-adult/metadata"
+	"github.com/RXWatcher/silo-plugin-adult/metadata"
 )
 
 // Aggregator fans out requests across one or more enabled Sources and merges

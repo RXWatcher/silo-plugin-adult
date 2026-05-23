@@ -1,6 +1,6 @@
 # Operations & Debugging
 
-Operator-facing notes for `continuum.adult`. Pairs with the top-level `README.md`
+Operator-facing notes for `silo.adult`. Pairs with the top-level `README.md`
 (which covers what the plugin is, capabilities, and configuration shape). This
 document focuses on day-2 concerns: how to tell whether a source is healthy, how
 the aggregator decides who answers a request, and what specific failure

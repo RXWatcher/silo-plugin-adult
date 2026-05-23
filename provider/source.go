@@ -3,7 +3,7 @@ package provider
 import (
 	"context"
 
-	"github.com/RXWatcher/continuum-plugin-adult/metadata"
+	"github.com/RXWatcher/silo-plugin-adult/metadata"
 )
 
 // Source is the contract every upstream (TPDB, Stash, etc.) implements.

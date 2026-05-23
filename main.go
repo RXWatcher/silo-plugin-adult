@@ -1,4 +1,4 @@
-// Package main is the entry point for the Continuum Adult metadata plugin.
+// Package main is the entry point for the Silo Adult metadata plugin.
 //
 // The plugin is a multi-source metadata aggregator for adult content. It
 // declares a single metadata_provider.v1 capability and routes Search /
@@ -18,15 +18,15 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/continuum/plugin/v1"
+	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/silo/plugin/v1"
 	publicmanifest "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginsdk/manifest"
 	"github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginsdk/runtime"
 
-	"github.com/RXWatcher/continuum-plugin-adult/metadata"
-	"github.com/RXWatcher/continuum-plugin-adult/models"
-	"github.com/RXWatcher/continuum-plugin-adult/provider"
-	"github.com/RXWatcher/continuum-plugin-adult/provider/sources/stash"
-	"github.com/RXWatcher/continuum-plugin-adult/provider/sources/tpdb"
+	"github.com/RXWatcher/silo-plugin-adult/metadata"
+	"github.com/RXWatcher/silo-plugin-adult/models"
+	"github.com/RXWatcher/silo-plugin-adult/provider"
+	"github.com/RXWatcher/silo-plugin-adult/provider/sources/stash"
+	"github.com/RXWatcher/silo-plugin-adult/provider/sources/tpdb"
 )
 
 // version is set at build time via -ldflags "-X main.version=...".

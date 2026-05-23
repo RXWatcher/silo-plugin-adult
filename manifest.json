@@ -1,8 +1,8 @@
 {
-  "plugin_id": "continuum.adult",
+  "plugin_id": "silo.adult",
   "version": "1.0.4",
   "checksum": "__CHECKSUM__",
-  "continuum_api_version": "v1",
+  "silo_api_version": "v1",
   "supported_platforms": [
     {
       "os": "darwin",

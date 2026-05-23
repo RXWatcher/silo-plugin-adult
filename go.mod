@@ -1,4 +1,4 @@
-module github.com/RXWatcher/continuum-plugin-adult
+module github.com/RXWatcher/silo-plugin-adult
 
 go 1.26.0
 

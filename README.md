@@ -1,6 +1,6 @@
-# Adult for Continuum
+# Adult for Silo
 
-`continuum.adult` is a metadata provider plugin that aggregates adult content metadata from multiple upstream sources (ThePornDB and a self-hosted Stash instance ship today) and exposes them to the Continuum host as a single `metadata_provider.v1` capability. Studios and sites are mapped to TV series, scenes resolved under a parent studio/site become episodes, and standalone full-length releases are exposed as movies.
+`silo.adult` is a metadata provider plugin that aggregates adult content metadata from multiple upstream sources (ThePornDB and a self-hosted Stash instance ship today) and exposes them to the Silo host as a single `metadata_provider.v1` capability. Studios and sites are mapped to TV series, scenes resolved under a parent studio/site become episodes, and standalone full-length releases are exposed as movies.
 
 ## Category
 
@@ -14,7 +14,7 @@ Lives under **Video / Metadata** (`category: "Video/Metadata"` in `manifest.json
 
 ## Dependencies
 
-Standalone. The plugin is consumed directly by the Continuum host's metadata pipeline alongside other metadata providers (e.g. `continuum-plugin-tmdb`, `continuum-plugin-tvdb`, `continuum-plugin-sports-fitness`). It has no SPA, no library catalog of its own, and no playback wiring.
+Standalone. The plugin is consumed directly by the Silo host's metadata pipeline alongside other metadata providers (e.g. `silo-plugin-tmdb`, `silo-plugin-tvdb`, `silo-plugin-sports-fitness`). It has no SPA, no library catalog of its own, and no playback wiring.
 
 ## External services
 
@@ -72,7 +72,7 @@ There is no separate `docs/` directory; design notes live alongside the code.
 
 ## Build and release
 
-CI builds linux-amd64 binaries on push to main via the reusable workflow in [RXWatcher/continuum-plugin-repository](https://github.com/RXWatcher/continuum-plugin-repository) and publishes them to the catalog at [`./binaries/`](https://github.com/RXWatcher/continuum-plugin-repository/tree/main/binaries).
+CI builds linux-amd64 binaries on push to main via the reusable workflow in [RXWatcher/silo-plugin-repository](https://github.com/RXWatcher/silo-plugin-repository) and publishes them to the catalog at [`./binaries/`](https://github.com/RXWatcher/silo-plugin-repository/tree/main/binaries).
 
 Local build targets (see `Makefile`):
 
