@@ -25,6 +25,7 @@ import (
 	"github.com/RXWatcher/silo-plugin-adult/metadata"
 	"github.com/RXWatcher/silo-plugin-adult/models"
 	"github.com/RXWatcher/silo-plugin-adult/provider"
+	"github.com/RXWatcher/silo-plugin-adult/provider/logging"
 )
 
 // Slug is the source identifier used in ProviderIDs maps and image URLs.
@@ -253,6 +254,15 @@ func (s *Source) GetEpisodes(ctx context.Context, req metadata.EpisodesRequest) 
 		if len(scenes) < perPage {
 			break
 		}
+	}
+	if len(out) >= maxEpisodesPerSite {
+		// The loop stopped on the cap, not a short page, so the site may have
+		// more scenes that were silently dropped. Surface that for operators.
+		logging.L().Warn("tpdb: episode cap reached, results truncated",
+			"site_id", raw,
+			"cap", maxEpisodesPerSite,
+			"returned", len(out),
+		)
 	}
 	return out, nil
 }

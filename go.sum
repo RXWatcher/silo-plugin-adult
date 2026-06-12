@@ -1,5 +1,3 @@
-github.com/Silo-Server/silo-plugin-sdk v0.5.0 h1:0yJpD0RP1AetGsWVCXoPih2ggLjN8hVp8blS+2RkIWU=
-github.com/Silo-Server/silo-plugin-sdk v0.5.0/go.mod h1:etqmxLTwjxpFH9goAjBDfNDoqHMv2/sqUXu8yx3hNfA=
 github.com/Silo-Server/silo-plugin-sdk v0.6.0 h1:Gi9TdH9kt7b8X4xRXH493/nSYb9n0GO4VCWmlll0hKI=
 github.com/Silo-Server/silo-plugin-sdk v0.6.0/go.mod h1:etqmxLTwjxpFH9goAjBDfNDoqHMv2/sqUXu8yx3hNfA=
 github.com/bufbuild/protocompile v0.14.1 h1:iA73zAf/fyljNjQKwYzUHD6AD4R8KMasmwa/FBatYVw=

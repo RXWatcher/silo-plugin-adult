@@ -12,7 +12,9 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"fmt"
+	neturl "net/url"
 	"os"
+	"strings"
 
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -23,6 +25,7 @@ import (
 	"github.com/RXWatcher/silo-plugin-adult/metadata"
 	"github.com/RXWatcher/silo-plugin-adult/models"
 	"github.com/RXWatcher/silo-plugin-adult/provider"
+	"github.com/RXWatcher/silo-plugin-adult/provider/logging"
 	"github.com/RXWatcher/silo-plugin-adult/provider/sources/stash"
 	"github.com/RXWatcher/silo-plugin-adult/provider/sources/tpdb"
 )
@@ -61,12 +64,38 @@ func (s *runtimeServer) Configure(_ context.Context, req *pluginv1.ConfigureRequ
 		cfgByKey[entry.GetKey()] = entry.GetValue().AsMap()
 	}
 
-	sources := []provider.Source{
-		tpdb.New(tpdbConfigFromMap(cfgByKey["tpdb"])),
-		stash.New(stashConfigFromMap(cfgByKey["stash"])),
-	}
+	tpdbSrc := tpdb.New(tpdbConfigFromMap(cfgByKey["tpdb"]))
+	stashSrc := stash.New(stashConfigFromMap(cfgByKey["stash"]))
+	sources := []provider.Source{tpdbSrc, stashSrc}
 	s.aggregator.SetSources(sources)
+
+	// Log which sources ended up enabled so operators can see the effective
+	// configuration without the host returning anything. Secrets (API keys)
+	// are never logged; for Stash we log only the configured host, not the
+	// full URL or key.
+	logging.L().Info("adult: configured sources",
+		"tpdb_enabled", tpdbSrc.Enabled(),
+		"stash_enabled", stashSrc.Enabled(),
+		"stash_host", stashHostFromMap(cfgByKey["stash"]),
+		"enabled_count", len(s.aggregator.Sources()),
+	)
 	return &pluginv1.ConfigureResponse{}, nil
+}
+
+// stashHostFromMap extracts just the host[:port] from the configured Stash
+// URL for logging. It deliberately drops scheme, path, query, and any
+// embedded credentials so nothing sensitive is logged. Returns "" when no URL
+// is configured or it cannot be parsed.
+func stashHostFromMap(m map[string]any) string {
+	raw := asString(m["url"])
+	if raw == "" {
+		return ""
+	}
+	u, err := neturl.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return ""
+	}
+	return u.Host
 }
 
 func tpdbConfigFromMap(m map[string]any) tpdb.Config {

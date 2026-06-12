@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"golang.org/x/time/rate"
+
+	"github.com/RXWatcher/silo-plugin-adult/provider/httpx"
+	"github.com/RXWatcher/silo-plugin-adult/provider/logging"
 )
 
 const (
@@ -143,16 +146,21 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 	if err := c.limiter.Wait(ctx); err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	// GETs are idempotent, so transient 5xx/network blips are retried with
+	// bounded backoff rather than failing the whole metadata fetch.
+	resp, err := httpx.DoWithRetry(ctx, c.http, httpx.RetryConfig{Source: "tpdb"}, func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "application/json")
+		if c.apiKey != "" {
+			req.Header.Set("Authorization", "Bearer "+c.apiKey)
+		}
+		return req, nil
+	})
 	if err != nil {
-		return err
-	}
-	req.Header.Set("Accept", "application/json")
-	if c.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	}
-	resp, err := c.http.Do(req)
-	if err != nil {
+		logging.L().Error("tpdb: request failed", "path", path, "error", err.Error())
 		return err
 	}
 	defer resp.Body.Close()
@@ -161,8 +169,15 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 		return ErrNotFound
 	}
 	if resp.StatusCode >= 400 {
+		// The upstream body may carry sensitive/attacker-influenced content,
+		// so it is logged for operators but kept out of the returned error.
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("tpdb: %s returned %d: %s", path, resp.StatusCode, string(body))
+		logging.L().Error("tpdb: upstream error",
+			"path", path,
+			"status", resp.StatusCode,
+			"body", string(body),
+		)
+		return fmt.Errorf("tpdb: %s returned %d", path, resp.StatusCode)
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
 }

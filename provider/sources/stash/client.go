@@ -7,21 +7,32 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"golang.org/x/time/rate"
+
+	"github.com/RXWatcher/silo-plugin-adult/provider/httpx"
+	"github.com/RXWatcher/silo-plugin-adult/provider/logging"
 )
 
 // Client is a minimal GraphQL client for a self-hosted Stash instance.
 //
 // Stash exposes a /graphql endpoint that accepts POST {query, variables}. The
 // optional ApiKey header is sent on every request when configured.
+// defaultRPS bounds requests to a self-hosted Stash instance. Studio episode
+// walks can fire up to ~10 paged queries back-to-back; the limiter keeps that
+// from hammering a small home server. The burst lets a single page-1 lookup go
+// out immediately while still smoothing the multi-page case.
+const defaultRPS = 5
+
 type Client struct {
-	url    string // full GraphQL endpoint, e.g. http://stash.local:9999/graphql
-	apiKey string
-	http   *http.Client
+	url     string // full GraphQL endpoint, e.g. http://stash.local:9999/graphql
+	apiKey  string
+	http    *http.Client
+	limiter *rate.Limiter
 }
 
 // NewClient constructs a client. base is expected to be the GraphQL endpoint;
@@ -33,9 +44,10 @@ type Client struct {
 // in do() rather than being sent to an unexpected target.
 func NewClient(base, apiKey string) *Client {
 	return &Client{
-		url:    normalizeBaseURL(base),
-		apiKey: apiKey,
-		http:   &http.Client{Timeout: 30 * time.Second},
+		url:     normalizeBaseURL(base),
+		apiKey:  apiKey,
+		http:    &http.Client{Timeout: 30 * time.Second},
+		limiter: rate.NewLimiter(rate.Limit(defaultRPS), 2),
 	}
 }
 
@@ -173,9 +185,19 @@ func (c *Client) FindPerformer(ctx context.Context, id string) (*performerDTO, e
 }
 
 // do POSTs a GraphQL query and decodes the data envelope into out.
+//
+// Although the transport is POST, these are read-only GraphQL queries against
+// a self-hosted instance and are safe to retry, so transient 5xx/network blips
+// are retried with bounded backoff. A rate limiter smooths multi-page studio
+// walks against small home servers.
 func (c *Client) do(ctx context.Context, query string, variables map[string]any, out any) error {
 	if c.url == "" {
 		return errors.New("stash: GraphQL endpoint not configured")
+	}
+	if c.limiter != nil {
+		if err := c.limiter.Wait(ctx); err != nil {
+			return err
+		}
 	}
 	body, err := json.Marshal(map[string]any{
 		"query":     query,
@@ -184,17 +206,22 @@ func (c *Client) do(ctx context.Context, query string, variables map[string]any,
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url, bytes.NewReader(body))
+	resp, err := httpx.DoWithRetry(ctx, c.http, httpx.RetryConfig{Source: "stash"}, func() (*http.Request, error) {
+		// Fresh reader per attempt: a retried request must re-read the body
+		// from the start rather than from the previous attempt's EOF.
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		if c.apiKey != "" {
+			req.Header.Set("ApiKey", c.apiKey)
+		}
+		return req, nil
+	})
 	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	if c.apiKey != "" {
-		req.Header.Set("ApiKey", c.apiKey)
-	}
-	resp, err := c.http.Do(req)
-	if err != nil {
+		logging.L().Error("stash: request failed", "error", err.Error())
 		return err
 	}
 	defer resp.Body.Close()
@@ -204,7 +231,10 @@ func (c *Client) do(ctx context.Context, query string, variables map[string]any,
 		// content, so it is logged for operators but never folded into the
 		// returned error (which can surface to clients / other plugins).
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		log.Printf("stash: request to %s returned %d: %s", c.url, resp.StatusCode, strings.TrimSpace(string(body)))
+		logging.L().Error("stash: upstream error",
+			"status", resp.StatusCode,
+			"body", strings.TrimSpace(string(body)),
+		)
 		return fmt.Errorf("stash: request failed with status %d", resp.StatusCode)
 	}
 
