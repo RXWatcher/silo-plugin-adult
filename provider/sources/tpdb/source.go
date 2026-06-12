@@ -21,10 +21,10 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/RXWatcher/silo-plugin-adult/metadata"
 	"github.com/RXWatcher/silo-plugin-adult/models"
+	"github.com/RXWatcher/silo-plugin-adult/provider"
 )
 
 // Slug is the source identifier used in ProviderIDs maps and image URLs.
@@ -98,7 +98,7 @@ func (s *Source) Search(ctx context.Context, query metadata.SearchQuery) ([]meta
 }
 
 func (s *Source) searchByLocalID(ctx context.Context, id string) ([]metadata.SearchResult, error) {
-	kind, raw, ok := parseLocalID(id)
+	kind, raw, ok := provider.ParseLocalID(id)
 	if !ok {
 		return nil, fmt.Errorf("tpdb: unrecognised id %q", id)
 	}
@@ -165,7 +165,7 @@ func (s *Source) GetMetadata(ctx context.Context, req metadata.MetadataRequest) 
 	if id == "" {
 		return nil, errors.New("tpdb: missing source id")
 	}
-	kind, raw, ok := parseLocalID(id)
+	kind, raw, ok := provider.ParseLocalID(id)
 	if !ok {
 		return nil, fmt.Errorf("tpdb: unrecognised id %q", id)
 	}
@@ -203,7 +203,7 @@ func (s *Source) GetSeasons(ctx context.Context, req metadata.SeasonsRequest) ([
 	if id == "" {
 		return nil, errors.New("tpdb: missing source id for seasons")
 	}
-	kind, raw, ok := parseLocalID(id)
+	kind, raw, ok := provider.ParseLocalID(id)
 	if !ok || kind != "site" {
 		return nil, fmt.Errorf("tpdb: GetSeasons requires a site id, got %q", id)
 	}
@@ -217,7 +217,7 @@ func (s *Source) GetSeasons(ctx context.Context, req metadata.SeasonsRequest) ([
 		Title:        st.Name,
 		Overview:     st.Description,
 		AirDate:      st.Date,
-		PosterPath:   encodeAbsolute(st.Poster),
+		PosterPath:   provider.EncodeAbsolute(st.Poster),
 	}}, nil
 }
 
@@ -232,7 +232,7 @@ func (s *Source) GetEpisodes(ctx context.Context, req metadata.EpisodesRequest) 
 	if id == "" {
 		return nil, errors.New("tpdb: missing source id for episodes")
 	}
-	kind, raw, ok := parseLocalID(id)
+	kind, raw, ok := provider.ParseLocalID(id)
 	if !ok || kind != "site" {
 		return nil, fmt.Errorf("tpdb: GetEpisodes requires a site id, got %q", id)
 	}
@@ -267,7 +267,7 @@ func (s *Source) GetPersonDetail(ctx context.Context, req metadata.PersonDetailR
 	if id == "" {
 		return nil, errors.New("tpdb: missing performer id")
 	}
-	kind, raw, ok := parseLocalID(id)
+	kind, raw, ok := provider.ParseLocalID(id)
 	if !ok || kind != "performer" {
 		raw = id
 	}
@@ -282,7 +282,7 @@ func (s *Source) GetPersonDetail(ctx context.Context, req metadata.PersonDetailR
 		DeathDate:  p.DeathDate,
 		Birthplace: p.Birthplace,
 		Homepage:   p.Homepage,
-		PhotoPath:  encodeAbsolute(p.Image),
+		PhotoPath:  provider.EncodeAbsolute(p.Image),
 		ProviderIDs: map[string]string{
 			Slug: "performer:" + p.ID,
 		},
@@ -300,7 +300,7 @@ func (s *Source) GetImages(ctx context.Context, req metadata.ImageRequest) ([]me
 	if id == "" {
 		return nil, errors.New("tpdb: missing source id for images")
 	}
-	kind, raw, ok := parseLocalID(id)
+	kind, raw, ok := provider.ParseLocalID(id)
 	if !ok {
 		return nil, fmt.Errorf("tpdb: unrecognised id %q", id)
 	}
@@ -341,35 +341,21 @@ func (s *Source) GetImages(ctx context.Context, req metadata.ImageRequest) ([]me
 // ResolveImage implements provider.Source. TPDB image URLs are already
 // absolute, so the "path" we store is just the URL-encoded original URL.
 // variant is ignored — TPDB does not expose size variants on a single asset.
+//
+// The decoded value originates from an upstream API response, so we constrain
+// it to a valid absolute https URL before handing it to the host; anything
+// else is dropped rather than letting the host fetch an arbitrary target.
 func (s *Source) ResolveImage(role, rawPath, variant string) string {
 	decoded, err := url.PathUnescape(rawPath)
 	if err != nil {
 		return ""
 	}
-	return decoded
+	return provider.SanitizeImageURL(decoded, true)
 }
 
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
-
-func parseLocalID(id string) (kind, raw string, ok bool) {
-	idx := strings.Index(id, ":")
-	if idx <= 0 || idx == len(id)-1 {
-		return "", "", false
-	}
-	return id[:idx], id[idx+1:], true
-}
-
-// encodeAbsolute prepares an absolute URL for storage as a source-relative
-// path. We URL-escape the whole URL so the aggregator can safely wrap it in
-// adult://<slug>/<role>/<path> without breaking on the embedded "://" and "/".
-func encodeAbsolute(absURL string) string {
-	if absURL == "" {
-		return ""
-	}
-	return url.PathEscape(absURL)
-}
 
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {
@@ -387,8 +373,8 @@ func firstNonEmpty(values ...string) string {
 func movieToSearchResult(m movieDTO) metadata.SearchResult {
 	return metadata.SearchResult{
 		Name:     m.Title,
-		Year:     yearFromDate(m.Date),
-		ImageURL: encodeAbsolute(m.Poster),
+		Year:     provider.YearFromDate(m.Date),
+		ImageURL: provider.EncodeAbsolute(m.Poster),
 		Overview: m.Description,
 		ProviderIDs: map[string]string{
 			Slug: "movie:" + m.ID,
@@ -399,8 +385,8 @@ func movieToSearchResult(m movieDTO) metadata.SearchResult {
 func sceneToSearchResult(sc sceneDTO) metadata.SearchResult {
 	return metadata.SearchResult{
 		Name:     sc.Title,
-		Year:     yearFromDate(sc.Date),
-		ImageURL: encodeAbsolute(sc.Poster),
+		Year:     provider.YearFromDate(sc.Date),
+		ImageURL: provider.EncodeAbsolute(sc.Poster),
 		Overview: sc.Description,
 		ProviderIDs: map[string]string{
 			Slug: "scene:" + sc.ID,
@@ -411,8 +397,8 @@ func sceneToSearchResult(sc sceneDTO) metadata.SearchResult {
 func siteToSearchResult(st siteDTO) metadata.SearchResult {
 	return metadata.SearchResult{
 		Name:     st.Name,
-		Year:     yearFromDate(st.Date),
-		ImageURL: encodeAbsolute(firstNonEmpty(st.Poster, st.Logo)),
+		Year:     provider.YearFromDate(st.Date),
+		ImageURL: provider.EncodeAbsolute(firstNonEmpty(st.Poster, st.Logo)),
 		Overview: st.Description,
 		ProviderIDs: map[string]string{
 			Slug: "site:" + strconv.Itoa(st.ID),
@@ -425,14 +411,14 @@ func movieToMetadata(m movieDTO) *metadata.MetadataResult {
 		HasMetadata: true,
 		Title:       m.Title,
 		Overview:    m.Description,
-		Year:        yearFromDate(m.Date),
+		Year:        provider.YearFromDate(m.Date),
 		Runtime:     m.Duration / 60,
 		ReleaseDate: m.Date,
 		Studios:     studiosFromSite(m.Site),
-		Genres:      tagsToGenres(m.Tags),
+		Genres:      provider.NamesToGenres(m.Tags, func(t tagDTO) string { return t.Name }),
 		People:      peopleFromScene(m.Performers, m.Directors),
-		PosterPath:  encodeAbsolute(m.Poster),
-		BackdropPath: encodeAbsolute(firstNonEmpty(
+		PosterPath:  provider.EncodeAbsolute(m.Poster),
+		BackdropPath: provider.EncodeAbsolute(firstNonEmpty(
 			m.Background.URL, m.Background.Large, m.Background.Medium,
 		)),
 		ProviderIDs: map[string]string{
@@ -446,14 +432,14 @@ func sceneToMetadata(sc sceneDTO) *metadata.MetadataResult {
 		HasMetadata: true,
 		Title:       sc.Title,
 		Overview:    sc.Description,
-		Year:        yearFromDate(sc.Date),
+		Year:        provider.YearFromDate(sc.Date),
 		Runtime:     sc.Duration / 60,
 		ReleaseDate: sc.Date,
 		Studios:     studiosFromSite(sc.Site),
-		Genres:      tagsToGenres(sc.Tags),
+		Genres:      provider.NamesToGenres(sc.Tags, func(t tagDTO) string { return t.Name }),
 		People:      peopleFromScene(sc.Performers, sc.Directors),
-		PosterPath:  encodeAbsolute(sc.Poster),
-		BackdropPath: encodeAbsolute(firstNonEmpty(
+		PosterPath:  provider.EncodeAbsolute(sc.Poster),
+		BackdropPath: provider.EncodeAbsolute(firstNonEmpty(
 			sc.Background.URL, sc.Background.Large, sc.Background.Medium,
 		)),
 		ProviderIDs: map[string]string{
@@ -467,13 +453,13 @@ func siteToMetadata(st siteDTO) *metadata.MetadataResult {
 		HasMetadata:  true,
 		Title:        st.Name,
 		Overview:     st.Description,
-		Year:         yearFromDate(st.Date),
+		Year:         provider.YearFromDate(st.Date),
 		FirstAirDate: st.Date,
 		LastAirDate:  st.LastScene,
 		SeasonCount:  1,
 		Studios:      []string{st.Network},
-		PosterPath:   encodeAbsolute(firstNonEmpty(st.Poster, st.Logo)),
-		LogoPath:     encodeAbsolute(st.Logo),
+		PosterPath:   provider.EncodeAbsolute(firstNonEmpty(st.Poster, st.Logo)),
+		LogoPath:     provider.EncodeAbsolute(st.Logo),
 		ProviderIDs: map[string]string{
 			Slug: "site:" + strconv.Itoa(st.ID),
 		},
@@ -489,7 +475,7 @@ func sceneToEpisode(sc sceneDTO, seasonNumber, episodeNumber int) metadata.Episo
 		Overview:      sc.Description,
 		AirDate:       sc.Date,
 		Runtime:       sc.Duration / 60,
-		StillPath:     encodeAbsolute(sc.Poster),
+		StillPath:     provider.EncodeAbsolute(sc.Poster),
 		ProviderIDs: map[string]string{
 			Slug: "scene:" + sc.ID,
 		},
@@ -507,16 +493,6 @@ func studiosFromSite(ref siteRefDTO) []string {
 	return out
 }
 
-func tagsToGenres(tags []tagDTO) []string {
-	out := make([]string, 0, len(tags))
-	for _, t := range tags {
-		if t.Name != "" {
-			out = append(out, t.Name)
-		}
-	}
-	return out
-}
-
 func peopleFromScene(performers []performerDTO, directors []directorDTO) []models.ItemPerson {
 	people := make([]models.ItemPerson, 0, len(performers)+len(directors))
 	for i, p := range performers {
@@ -524,7 +500,7 @@ func peopleFromScene(performers []performerDTO, directors []directorDTO) []model
 			Person: models.Person{
 				Name:      p.Name,
 				TpdbID:    p.ID,
-				PhotoPath: encodeAbsolute(p.Image),
+				PhotoPath: provider.EncodeAbsolute(p.Image),
 			},
 			Kind:      models.PersonKindActor,
 			SortOrder: i,
@@ -541,15 +517,4 @@ func peopleFromScene(performers []performerDTO, directors []directorDTO) []model
 		})
 	}
 	return people
-}
-
-func yearFromDate(date string) int {
-	if len(date) < 4 {
-		return 0
-	}
-	y, err := strconv.Atoi(date[:4])
-	if err != nil {
-		return 0
-	}
-	return y
 }

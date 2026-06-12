@@ -13,14 +13,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	"time"
 
 	"google.golang.org/protobuf/types/known/structpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
-	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/silo/plugin/v1"
-	publicmanifest "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginsdk/manifest"
-	"github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginsdk/runtime"
+	pluginv1 "github.com/Silo-Server/silo-plugin-sdk/pkg/pluginproto/silo/plugin/v1"
+	publicmanifest "github.com/Silo-Server/silo-plugin-sdk/pkg/pluginsdk/manifest"
+	"github.com/Silo-Server/silo-plugin-sdk/pkg/pluginsdk/runtime"
 
 	"github.com/RXWatcher/silo-plugin-adult/metadata"
 	"github.com/RXWatcher/silo-plugin-adult/models"
@@ -31,8 +29,6 @@ import (
 
 // version is set at build time via -ldflags "-X main.version=...".
 var version string
-
-const resolvedImageURLTTL = 24 * time.Hour
 
 //go:embed manifest.json
 var manifestJSON []byte
@@ -140,8 +136,15 @@ func (s *metadataServer) GetMetadata(ctx context.Context, req *pluginv1.GetMetad
 		Language:    req.GetLanguage(),
 		FilePath:    req.GetFilePath(),
 	})
-	if err != nil || result == nil {
+	if err != nil {
 		return nil, err
+	}
+	if result == nil {
+		// No source matched / nothing found. The host treats an empty
+		// response (Item == nil) as "not found"; returning a nil message
+		// instead would force the gRPC layer to marshal a nil and is not a
+		// valid not-found signal.
+		return &pluginv1.GetMetadataResponse{}, nil
 	}
 
 	item, err := metadataItemFromResult(result, req.GetItemType())
@@ -273,25 +276,15 @@ func (s *metadataServer) GetImages(ctx context.Context, req *pluginv1.GetImagesR
 
 func (s *metadataServer) ResolveImageURL(_ context.Context, req *pluginv1.ResolveImageURLRequest) (*pluginv1.ResolveImageURLResponse, error) {
 	url := s.runtime.aggregator.ResolveImage(req.GetPath(), req.GetVariant())
-	return &pluginv1.ResolveImageURLResponse{
-		Url:       url,
-		ExpiresAt: timestamppb.New(time.Now().Add(resolvedImageURLTTL)),
-	}, nil
+	return &pluginv1.ResolveImageURLResponse{Url: url}, nil
 }
 
 func (s *metadataServer) ResolveImageURLs(_ context.Context, req *pluginv1.ResolveImageURLsRequest) (*pluginv1.ResolveImageURLsResponse, error) {
 	urls := make(map[string]string, len(req.GetPaths()))
-	resolved := make(map[string]*pluginv1.ResolvedImageURL, len(req.GetPaths()))
-	expiresAt := timestamppb.New(time.Now().Add(resolvedImageURLTTL))
 	for _, path := range req.GetPaths() {
-		u := s.runtime.aggregator.ResolveImage(path, req.GetVariant())
-		urls[path] = u
-		resolved[path] = &pluginv1.ResolvedImageURL{
-			Url:       u,
-			ExpiresAt: expiresAt,
-		}
+		urls[path] = s.runtime.aggregator.ResolveImage(path, req.GetVariant())
 	}
-	return &pluginv1.ResolveImageURLsResponse{Urls: urls, ResolvedUrls: resolved}, nil
+	return &pluginv1.ResolveImageURLsResponse{Urls: urls}, nil
 }
 
 // ---------------------------------------------------------------------------

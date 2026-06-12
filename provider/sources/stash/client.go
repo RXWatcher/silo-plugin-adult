@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -24,15 +26,48 @@ type Client struct {
 
 // NewClient constructs a client. base is expected to be the GraphQL endpoint;
 // a path of /graphql is appended if missing so users can paste the bare host.
+//
+// The base URL is admin-configured and used as a POST target, so it is
+// validated here: it must parse, use an http(s) scheme, and carry a host. An
+// invalid base yields an empty client URL, which makes every request fail fast
+// in do() rather than being sent to an unexpected target.
 func NewClient(base, apiKey string) *Client {
-	if base != "" && !strings.Contains(base, "/graphql") {
-		base = strings.TrimRight(base, "/") + "/graphql"
-	}
 	return &Client{
-		url:    base,
+		url:    normalizeBaseURL(base),
 		apiKey: apiKey,
 		http:   &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+// normalizeBaseURL validates and canonicalizes the admin-supplied Stash base
+// URL. It parses the URL (rather than substring-matching) so the /graphql
+// suffix is only appended when the *path* is missing it, and rejects any URL
+// that is not an absolute http(s) URL with a host. Returns "" on rejection.
+func normalizeBaseURL(base string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return ""
+	}
+	u, err := url.Parse(base)
+	if err != nil {
+		return ""
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https":
+	default:
+		return ""
+	}
+	if u.Host == "" {
+		return ""
+	}
+	// Append /graphql only when the path doesn't already end in it.
+	path := strings.TrimRight(u.Path, "/")
+	if !strings.HasSuffix(path, "/graphql") {
+		u.Path = path + "/graphql"
+	} else {
+		u.Path = path
+	}
+	return u.String()
 }
 
 // SetHTTPClient overrides the underlying HTTP client. Used by tests.
@@ -165,8 +200,12 @@ func (c *Client) do(ctx context.Context, query string, variables map[string]any,
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
+		// The upstream body may contain attacker-influenced or sensitive
+		// content, so it is logged for operators but never folded into the
+		// returned error (which can surface to clients / other plugins).
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("stash: %s returned %d: %s", c.url, resp.StatusCode, string(body))
+		log.Printf("stash: request to %s returned %d: %s", c.url, resp.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("stash: request failed with status %d", resp.StatusCode)
 	}
 
 	var envelope struct {

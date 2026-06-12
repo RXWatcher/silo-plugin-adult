@@ -126,15 +126,32 @@ func (a *Aggregator) Search(ctx context.Context, query metadata.SearchQuery) ([]
 		}(i, s)
 	}
 
+	// sources is sorted by priority ascending, so index 0 is the
+	// highest-priority source. We collect every fan-out result by index and
+	// then pick the error (if any) belonging to the lowest index that failed.
+	// This makes firstErr deterministic and priority-blind regardless of the
+	// order goroutines happen to complete in.
 	collected := make([][]metadata.SearchResult, len(sources))
-	var firstErr error
+	errs := make([]error, len(sources))
 	for i := 0; i < len(sources); i++ {
-		r := <-ch
-		if r.err != nil && firstErr == nil {
-			firstErr = fmt.Errorf("%s: %w", sources[r.idx].Slug(), r.err)
-			continue
+		select {
+		case <-ctx.Done():
+			// The caller gave up (timeout / cancellation). Surface that
+			// directly rather than waiting on the remaining goroutines —
+			// they share the same ctx and will unwind on their own.
+			return nil, ctx.Err()
+		case r := <-ch:
+			collected[r.idx] = r.results
+			errs[r.idx] = r.err
 		}
-		collected[r.idx] = r.results
+	}
+
+	var firstErr error
+	for idx, err := range errs {
+		if err != nil {
+			firstErr = fmt.Errorf("%s: %w", sources[idx].Slug(), err)
+			break
+		}
 	}
 
 	merged := make([]metadata.SearchResult, 0)

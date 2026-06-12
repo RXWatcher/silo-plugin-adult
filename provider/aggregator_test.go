@@ -19,10 +19,10 @@ type fakeSource struct {
 	resolved   map[string]string
 }
 
-func (f *fakeSource) Slug() string     { return f.slug }
-func (f *fakeSource) Name() string     { return f.slug }
-func (f *fakeSource) Enabled() bool    { return f.enabled }
-func (f *fakeSource) Priority() int    { return f.priority }
+func (f *fakeSource) Slug() string  { return f.slug }
+func (f *fakeSource) Name() string  { return f.slug }
+func (f *fakeSource) Enabled() bool { return f.enabled }
+func (f *fakeSource) Priority() int { return f.priority }
 
 func (f *fakeSource) Search(_ context.Context, _ metadata.SearchQuery) ([]metadata.SearchResult, error) {
 	if f.searchErr != nil {
@@ -148,6 +148,76 @@ func TestAggregatorReturnsErrorWhenAllSourcesFail(t *testing.T) {
 		t.Fatal("expected error when all sources fail")
 	}
 }
+
+func TestAggregatorSearchErrorIsHighestPriority(t *testing.T) {
+	// high priority (lower number) sorts first; its error must be the one
+	// surfaced regardless of goroutine completion order.
+	high := &fakeSource{slug: "high", enabled: true, priority: 1, searchErr: errors.New("high-boom")}
+	low := &fakeSource{slug: "low", enabled: true, priority: 9, searchErr: errors.New("low-boom")}
+	agg := NewAggregator()
+	agg.SetSources([]Source{low, high}) // input order reversed on purpose
+
+	for i := 0; i < 50; i++ { // repeat to shake out nondeterminism
+		_, err := agg.Search(context.Background(), metadata.SearchQuery{Title: "x"})
+		if err == nil {
+			t.Fatal("expected error when all sources fail")
+		}
+		if got := err.Error(); got[:4] != "high" {
+			t.Fatalf("expected highest-priority source error first, got %q", got)
+		}
+	}
+}
+
+func TestAggregatorSearchRespectsContextCancellation(t *testing.T) {
+	// blockingSource never returns until its context is cancelled, so the
+	// collector's only ready select case is ctx.Done().
+	src := &blockingSource{slug: "src"}
+	agg := NewAggregator()
+	agg.SetSources([]Source{src})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled before the call
+
+	if _, err := agg.Search(ctx, metadata.SearchQuery{Title: "x"}); err == nil {
+		t.Fatal("expected context cancellation error")
+	}
+}
+
+// blockingSource blocks Search until the context is done, modelling a slow
+// upstream so we can exercise the collector's ctx.Done() path.
+type blockingSource struct{ slug string }
+
+func (b *blockingSource) Slug() string  { return b.slug }
+func (b *blockingSource) Name() string  { return b.slug }
+func (b *blockingSource) Enabled() bool { return true }
+func (b *blockingSource) Priority() int { return 1 }
+
+func (b *blockingSource) Search(ctx context.Context, _ metadata.SearchQuery) ([]metadata.SearchResult, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func (b *blockingSource) GetMetadata(context.Context, metadata.MetadataRequest) (*metadata.MetadataResult, error) {
+	return nil, nil
+}
+
+func (b *blockingSource) GetPersonDetail(context.Context, metadata.PersonDetailRequest) (*metadata.PersonDetailResult, error) {
+	return nil, nil
+}
+
+func (b *blockingSource) GetSeasons(context.Context, metadata.SeasonsRequest) ([]metadata.SeasonResult, error) {
+	return nil, nil
+}
+
+func (b *blockingSource) GetEpisodes(context.Context, metadata.EpisodesRequest) ([]metadata.EpisodeResult, error) {
+	return nil, nil
+}
+
+func (b *blockingSource) GetImages(context.Context, metadata.ImageRequest) ([]metadata.RemoteImage, error) {
+	return nil, nil
+}
+
+func (b *blockingSource) ResolveImage(_, _, _ string) string { return "" }
 
 func TestEncodeDecodeProviderID(t *testing.T) {
 	encoded := EncodeProviderID("tpdb", "scene:abc")
